@@ -13,7 +13,7 @@ class PatientAdmin(admin.ModelAdmin):
     list_display=("full_name","email","phone")
     search_fields=("full_name","email")
 
-admin.register(DoctorWorkingHours)
+@admin.register(DoctorWorkingHours)
 class DoctorWorkingHoursAdmin(admin.ModelAdmin):
     list_display=(
         "doctor","weekday","starts_time","ends_time"
@@ -24,5 +24,5 @@ class DoctorWorkingHoursAdmin(admin.ModelAdmin):
 class AppointmentAdmin(admin.ModelAdmin):
     list_display =("doctor","patient","starts_at","ends_at","status")
     list_filter=("status","doctor")
-    search_fields=("doctor_name","patient__full_name")
+    search_fields=("doctor__name","patient__full_name")
     readonly_fields=("created_at","updated_at")

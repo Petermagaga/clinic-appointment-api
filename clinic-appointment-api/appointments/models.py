@@ -43,19 +43,19 @@ class DoctorWorkingHours(models.Model):
 
     doctor=models.ForeignKey(Doctor,on_delete=models.CASCADE,related_name="working_hours",)
     weekday=models.IntegerField(choices=Weekday.choices)
-    start_time=models.TimeField()
-    end_time=models.TimeField()
+    starts_time=models.TimeField()
+    ends_time=models.TimeField()
 
     class Meta:
-        ordering=["weekday","start_time"]
+        ordering=["weekday","starts_time"]
         constraints=[
             models.UniqueConstraint(
                 fields=["doctor","weekday"],
                 name="unique_doctor_working_day",
             ),
             models.CheckConstraint(
-                condition=Q(end_time__gt=F("start_time")),
-                name="working_hours_end_after_start",
+                condition=Q(ends_time__gt=F("starts_time")),
+                name="working_hours_ends_after_start",
             ),
 
         ]
@@ -63,17 +63,17 @@ class DoctorWorkingHours(models.Model):
     def clean(self):
         super().clean()
 
-        if (self.start_time is not None and self.end_time is not None and self.end_time<=self.start_time):
+        if (self.starts_time is not None and self.ends_time is not None and self.ends_time<=self.starts_time):
 
             raise ValidationError(
                 {
-                    "end_time":"End time must be later thaan start time."
+                    "ends_time":"End time must be later thaan start time."
                 }
             )
 
     def __str__(self):
-        return (f"{self.doctor.name} - {self.get_weekday_dispaly()}",
-                f"({self.start_time} to {self.end_time})")
+        return (f"{self.doctor.name} - {self.get_weekday_display()}"
+                f"({self.starts_time} to {self.ends_time})")
     
 
 class Appointment(models.Model):
@@ -97,7 +97,7 @@ class Appointment(models.Model):
         ordering=["starts_at"]
         constraints=[
             models.CheckConstraint(condition=Q(ends_at__gt=F("starts_at")),
-                                   name="appointment_end_after_start",
+                                   name="appointment_ends_after_start",
                                 ),
             models.UniqueConstraint(
                 fields=["doctor","starts_at"],
