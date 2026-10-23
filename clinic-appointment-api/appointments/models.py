@@ -84,7 +84,7 @@ class Appointment(models.Model):
     SLOT_DURATION=timedelta(minutes=30)
     doctor=models.ForeignKey(Doctor,on_delete=models.PROTECT,related_name="appontments",)
     patient=models.ForeignKey(Patient,on_delete=models.PROTECT,related_name="appointments")
-    start_at=models.DateTimeField()
+    starts_at=models.DateTimeField()
     ends_at=models.DateTimeField()
 
     status=models.CharField(max_length=20,choices=Status.choices,default=Status.BOOKED,)
