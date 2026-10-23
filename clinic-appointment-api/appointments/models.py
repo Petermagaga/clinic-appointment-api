@@ -110,17 +110,17 @@ class Appointment(models.Model):
         super().clean()
         errors={}
 
-        if self.start_at and self.ends_at:
-            if self.ends_at <=self.start_at:
+        if self.starts_at and self.ends_at:
+            if self.ends_at <=self.starts_at:
 
                 errors["ends_at"]=(
                     "Appointment end must be later than its start"
                 )
-            elif self.ends_at -self.start_at !=self.SLOT_DURATION:
+            elif self.ends_at -self.starts_at !=self.SLOT_DURATION:
                 errors["ends_at"]=(
                     "Appointments must last exactly 30 minutes."
                 )        
-        if (self.start_at and self.start_at.minute%30 !=0):
+        if (self.starts_at and self.starts_at.minute%30 !=0):
             errors["starts_at"] =(
                 "Appointment must start on a 30 minute boundary"
             )
@@ -130,7 +130,7 @@ class Appointment(models.Model):
     def __str__(self):
         return (
             f"{self.patient.full_name} with {self.doctor.name}"
-            f"at {self.start_at}"
+            f"at {self.starts_at}"
         )
 
 
