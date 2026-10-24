@@ -142,5 +142,35 @@ def book_appointment(*,doctor_id,patient_id,starts_at):
             })
 
 
+def cancel_appointment(*,appointment_id,reason):
+      """
+      Cancel an existing booked appointment without deleting its record.
+      """
 
-    
+      try:
+            with transaction.atomic():
+                  appointment=(
+                        Appointment.objects.select_for_update().get(pk=appointment_id)
+                  )
+
+                  if appointment.status == Appointment.Status.CANCELLED:
+                        raise ValidationError({
+                              "detail":"This appointment has already been cancelled"
+
+                        })
+                  appointment.status=Appointment.Status.CANCELLED
+                  appointment.cancellation_reason= reason.strip()
+                  appointment.full_clean()
+                  appointment.save(
+                        update_fields=[
+                              "status",
+                              "cancellation_reason",
+                              "updated_at",
+                        ]
+                  )
+                  return appointment
+
+      except Appointment.DoesNotExist:
+            raise ValidationError(
+                  {"appointment_id":"The selected appointment does not exist."}
+            )    

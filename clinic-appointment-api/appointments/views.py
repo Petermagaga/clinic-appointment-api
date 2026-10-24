@@ -6,11 +6,12 @@ from rest_framework import status
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.exceptions import NotFound
 
-from .serializers import (AppointmentSerializer,AppointmentCreateSerializer)
+from .serializers import (AppointmentSerializer,AppointmentCreateSerializer,AppointmentCancelSerializer)
 from .models import Appointment,Doctor,DoctorWorkingHours
 
-from .services import book_appointment
+from .services import book_appointment,cancel_appointment
 class AppointmentCreateView(APIView):
     def post(self,request):
         serializer = AppointmentCreateSerializer(data=request.data)
@@ -44,7 +45,7 @@ class DoctorAvailabilityView(APIView):
 
         if not date_value:
             return Response(
-                {"date":["This query parameter is required. "]},
+                {"date":["This query parameter is required."]},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -127,3 +128,33 @@ class DoctorAvailabilityView(APIView):
             "date": requested_date.isoformat(),
             "available_slots": available_slots,
         })
+
+
+class AppointmentCancelView(APIView):
+    def patch(self,request,appointment_id):
+        request_serializer =AppointmentCancelSerializer(
+            data=request.data
+        )
+        request_serializer.is_valid(raise_exception=True)
+
+        try:
+            appointment=cancel_appointment(
+                appointment_id=appointment_id,
+                reason=request_serializer.validated_data["reason"],
+            )
+
+        except DjangoValidationError as exc:
+            details=(
+                exc.message_dict
+                if hasattr(exc,"message_dict")
+                else {"detail":exc.messages} )
+
+            if "appointment_id" in details:
+                raise NotFound(details) from exc
+
+            raise ValidationError(details) from exc
+        response_serializer=AppointmentSerializer(appointment)
+        return Response(
+            response_serializer.data,
+            status=status.HTTP_200_OK,
+        )

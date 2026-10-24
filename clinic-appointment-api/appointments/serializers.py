@@ -42,5 +42,16 @@ class AppointmentSerializer(serializers.ModelSerializer):
         ]
         read_only_fields=fields
 
+class AppointmentCancelSerializer(serializers.Serializer):
+    reason=serializers.CharField(
+        required=True,allow_blank=False,trim_whitespace=True,
+        max_length=1000,
+    )
 
-
+    def validate_reason(self,value):
+        if not value.strip():
+            raise serializers.ValidationError(
+                "A cancellation reason is required."
+            )
+        return value.strip()
+    

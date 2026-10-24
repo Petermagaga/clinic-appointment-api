@@ -5,8 +5,12 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.utils import timezone
 
+from rest_framework.test  import APIRequestFactory
+from  rest_framework import status
+
+from .views import AppointmentCancelView
 from .models import Doctor, DoctorWorkingHours, Patient, Appointment
-from .services import book_appointment
+from .services import book_appointment,cancel_appointment
 
 
 class BookingServiceTests(TestCase):
@@ -119,3 +123,110 @@ class BookingServiceTests(TestCase):
                 starts_at=self.future_weekday_at(),
 
             )
+
+
+
+class AppointmentCancellationTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.doctor = Doctor.objects.create(
+            name="Dr. Amina Hassan",
+            speciality="General Practice",
+            is_active=True,
+        )
+        cls.patient = Patient.objects.create(
+            full_name="Mary Wanjiku",
+            email="mary.cancel@example.com",
+        )
+
+        for weekday in range(5):
+            DoctorWorkingHours.objects.create(
+                doctor=cls.doctor,
+                weekday=weekday,
+                starts_time=time(9, 0),
+                ends_time=time(17, 0),
+            )
+
+    def create_appointment(self):
+        day = timezone.localdate() + timedelta(days=2)
+
+        while day.weekday() >= 5:
+            day += timedelta(days=1)
+
+        starts_at = timezone.make_aware(
+            datetime.combine(day, time(10, 0)),
+            timezone.get_current_timezone(),
+        )
+
+        return book_appointment(
+            doctor_id=self.doctor.id,
+            patient_id=self.patient.id,
+            starts_at=starts_at,
+        )
+
+    def test_cancellation_saves_reason_and_preserves_record(self):
+        appointment = self.create_appointment()
+
+        cancelled = cancel_appointment(
+            appointment_id=appointment.id,
+            reason="Patient requested cancellation",
+        )
+
+        cancelled.refresh_from_db()
+
+        self.assertEqual(
+            cancelled.status,
+            Appointment.Status.CANCELLED,
+        )
+        self.assertEqual(
+            cancelled.cancellation_reason,
+            "Patient requested cancellation",
+        )
+        self.assertTrue(
+            Appointment.objects.filter(pk=appointment.id).exists()
+        )
+
+    def test_already_cancelled_appointment_is_rejected(self):
+        appointment = self.create_appointment()
+
+        cancel_appointment(
+            appointment_id=appointment.id,
+            reason="Patient requested cancellation",
+        )
+
+        with self.assertRaises(ValidationError):
+            cancel_appointment(
+                appointment_id=appointment.id,
+                reason="Trying to cancel again",
+            )
+
+    def test_nonexistent_appointment_is_rejected(self):
+        with self.assertRaises(ValidationError):
+            cancel_appointment(
+                appointment_id=999999,
+                reason="Not applicable",
+            )
+
+    def test_api_rejects_missing_cancellation_reason(self):
+        appointment = self.create_appointment()
+        factory = APIRequestFactory()
+
+        request = factory.patch(
+            f"/api/appointments/{appointment.id}/cancel/",
+            {},
+            format="json",
+        )
+        response = AppointmentCancelView.as_view()(
+            request,
+            appointment_id=appointment.id,
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        appointment.refresh_from_db()
+        self.assertEqual(
+            appointment.status,
+            Appointment.Status.BOOKED,
+        )
