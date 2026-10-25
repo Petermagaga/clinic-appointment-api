@@ -174,3 +174,53 @@ def cancel_appointment(*,appointment_id,reason):
             raise ValidationError(
                   {"appointment_id":"The selected appointment does not exist."}
             )    
+
+
+def reschedule_appointment(*,appointment_id,new_starts_at):
+      """
+      Move a booked appointment to a new slot.
+      if validation fails, the existing appointment remains unchanged
+      """
+
+      try:
+            with transaction.atomic():
+                  appointment=(
+                        Appointment.objects.select_for_update().get
+                        (pk=appointment_id)
+                  )
+
+                  if appointment.status == Appointment.Status.CANCELLED:
+                        raise ValidationError(
+                              {"detail":"A cancelled appointment cannot be rescheduled."}
+                        )
+
+                  new_ends_at=new_starts_at+SLOT_DURATION
+
+                  validate_appointment_slot(
+                        doctor=appointment.doctor,
+                        starts_at=new_starts_at,
+                        ends_at=new_ends_at,
+                        exclude_appointment_id=appointment.id,
+                  )
+
+                  appointment.starts_at=new_starts_at
+                  appointment.ends_at=new_ends_at
+                  appointment.full_clean()
+                  appointment.save(
+                        update_fields=[
+                              "starts_at",
+                              "ends_at",
+                              "updated_at",
+                        ]
+                  )
+
+                  return appointment
+
+      except Appointment.DoesNotExist:
+            raise ValidationError({
+                  "appointment_id":"The selected appointment does not exist."
+            })
+      
+      
+
+

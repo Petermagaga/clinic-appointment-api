@@ -8,10 +8,15 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.exceptions import NotFound
 
-from .serializers import (AppointmentSerializer,AppointmentCreateSerializer,AppointmentCancelSerializer)
-from .models import Appointment,Doctor,DoctorWorkingHours
+from .serializers import (AppointmentSerializer,
+                          AppointmentCreateSerializer,
+                          AppointmentCancelSerializer)
+from .models import (Appointment,
+                     Doctor,DoctorWorkingHours)
 
-from .services import book_appointment,cancel_appointment
+from .services import (book_appointment,
+                       cancel_appointment,
+                       reschedule_appointment)
 class AppointmentCreateView(APIView):
     def post(self,request):
         serializer = AppointmentCreateSerializer(data=request.data)
@@ -158,3 +163,43 @@ class AppointmentCancelView(APIView):
             response_serializer.data,
             status=status.HTTP_200_OK,
         )
+
+
+class AppointmentRescheduleView(APIView):
+    def patch(self,request,appointment_id):
+        request_serializer=AppointmentRescheduleView(
+            data=request.data
+        )
+        request_serializer.is_valid(raise_exception=True)
+
+        try:
+            appointment=reschedule_appointment(
+                appointment_id=appointment_id,
+                new_starts_at=request_serializer.validated_data[
+                    "new_starts_at"
+                ],
+            )
+
+        except DjangoValidationError as exc:
+            details=(
+                exc.message_dict
+                if hasattr(exc,"message_dict")
+                else {"detail":exc.messages}
+            )
+
+            if "appointment_id" in details:
+                raise NotFound(details) from exc
+
+            raise ValidationError(details) from exc
+
+        response_serializer = AppointmentSerializer(appointment)
+        return Response(
+            response_serializer.data,
+            status=status.HTTP_200_OK,
+        )
+
+
+
+    
+
+        

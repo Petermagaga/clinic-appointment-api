@@ -54,4 +54,7 @@ class AppointmentCancelSerializer(serializers.Serializer):
                 "A cancellation reason is required."
             )
         return value.strip()
-    
+
+
+class AppointmentRescheduleSerializer(serializers.Serializer):
+    new_starts_at= serializers.DateTimeField(required=True)

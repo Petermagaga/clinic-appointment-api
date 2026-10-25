@@ -9,8 +9,12 @@ from rest_framework.test  import APIRequestFactory
 from  rest_framework import status
 
 from .views import AppointmentCancelView
-from .models import Doctor, DoctorWorkingHours, Patient, Appointment
-from .services import book_appointment,cancel_appointment
+from .models import (Doctor, DoctorWorkingHours, 
+                     Patient, 
+                     Appointment)
+from .services import (book_appointment,
+                       cancel_appointment,
+                       reschedule_appointment)
 
 
 class BookingServiceTests(TestCase):
@@ -230,3 +234,119 @@ class AppointmentCancellationTests(TestCase):
             appointment.status,
             Appointment.Status.BOOKED,
         )
+
+
+class AppointmentReschedulingTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.doctor = Doctor.objects.create(
+            name="Dr. Amina Hassan",
+            speciality="General Practice",
+            is_active=True,
+        )
+        cls.patient = Patient.objects.create(
+            full_name="Mary Wanjiku",
+            email="mary.reschedule@example.com",
+        )
+
+        for weekday in range(5):
+            DoctorWorkingHours.objects.create(
+                doctor=cls.doctor,
+                weekday=weekday,
+                starts_time=time(9, 0),
+                ends_time=time(17, 0),
+            )
+
+    def future_weekday_at(self, hour=10, minute=0, days_ahead=2):
+        day = timezone.localdate() + timedelta(days=days_ahead)
+
+        while day.weekday() >= 5:
+            day += timedelta(days=1)
+
+        return timezone.make_aware(
+            datetime.combine(day, time(hour, minute)),
+            timezone.get_current_timezone(),
+        )
+
+    def create_appointment(self):
+        return book_appointment(
+            doctor_id=self.doctor.id,
+            patient_id=self.patient.id,
+            starts_at=self.future_weekday_at(),
+        )
+
+    def test_reschedule_succeeds_and_updates_existing_record(self):
+        appointment = self.create_appointment()
+        original_id = appointment.id
+        new_starts_at = self.future_weekday_at(
+            hour=11,
+            days_ahead=3,
+        )
+
+        updated = reschedule_appointment(
+            appointment_id=appointment.id,
+            new_starts_at=new_starts_at,
+        )
+
+        self.assertEqual(updated.id, original_id)
+        self.assertEqual(updated.starts_at, new_starts_at)
+        self.assertEqual(
+            updated.ends_at,
+            new_starts_at + timedelta(minutes=30),
+        )
+        self.assertEqual(
+            updated.status,
+            Appointment.Status.BOOKED,
+        )
+        self.assertEqual(Appointment.objects.count(), 1)
+
+    def test_reschedule_to_an_occupied_slot_is_rejected(self):
+        first = self.create_appointment()
+        occupied_start = self.future_weekday_at(
+            hour=11,
+            days_ahead=3,
+        )
+
+        book_appointment(
+            doctor_id=self.doctor.id,
+            patient_id=self.patient.id,
+            starts_at=occupied_start,
+        )
+
+        original_start = first.starts_at
+
+        with self.assertRaises(ValidationError):
+            reschedule_appointment(
+                appointment_id=first.id,
+                new_starts_at=occupied_start,
+            )
+
+        first.refresh_from_db()
+        self.assertEqual(first.starts_at, original_start)
+
+    def test_cancelled_appointment_cannot_be_rescheduled(self):
+        appointment = self.create_appointment()
+
+        cancel_appointment(
+            appointment_id=appointment.id,
+            reason="Patient requested cancellation",
+        )
+
+        with self.assertRaises(ValidationError):
+            reschedule_appointment(
+                appointment_id=appointment.id,
+                new_starts_at=self.future_weekday_at(
+                    hour=11,
+                    days_ahead=3,
+                ),
+            )
+
+    def test_nonexistent_appointment_cannot_be_rescheduled(self):
+        with self.assertRaises(ValidationError):
+            reschedule_appointment(
+                appointment_id=999999,
+                new_starts_at=self.future_weekday_at(
+                    hour=11,
+                    days_ahead=3,
+                ),
+            )
