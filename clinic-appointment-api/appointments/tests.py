@@ -516,3 +516,28 @@ class PatientAppointmentsAPITests(TestCase):
             status.HTTP_404_NOT_FOUND,
         )
 
+
+    def test_excludes_past_appointments(self):
+        appointment = self.create_appointment(
+            hour=10,
+            days_ahead=2,
+        )
+
+        Appointment.objects.filter(pk=appointment.id).update(
+            starts_at=timezone.now() - timedelta(days=1),
+            ends_at=timezone.now() - timedelta(days=1)
+            + timedelta(minutes=30),
+        )
+
+        response = self.make_request(self.patient.id)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, [])
+
+
+    def test_patient_with_no_upcoming_appointments_gets_empty_list(self):
+        response = self.make_request(self.patient.id)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, [])
+
