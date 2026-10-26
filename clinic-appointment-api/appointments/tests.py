@@ -6,9 +6,11 @@ from django.test import TestCase
 from django.utils import timezone
 
 from rest_framework.test  import APIRequestFactory
-from  rest_framework import status
+from rest_framework import status
 
-from .views import AppointmentCancelView,AppointmentRescheduleView
+from .views import (AppointmentCancelView,
+                    AppointmentRescheduleView,
+                    PatientAppointmentsView)
 from .models import (Doctor, DoctorWorkingHours, 
                      Patient, 
                      Appointment)
@@ -431,3 +433,86 @@ class AppointmentRescheduleAPITests(TestCase):
             response.status_code,
             status.HTTP_400_BAD_REQUEST,
         )
+
+
+class PatientAppointmentsAPITests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.doctor = Doctor.objects.create(
+            name="Dr. Amina Hassan",
+            speciality="General Practice",
+            is_active=True,
+        )
+        cls.patient = Patient.objects.create(
+            full_name="Mary Wanjiku",
+            email="mary.patient@example.com",
+        )
+
+        for weekday in range(5):
+            DoctorWorkingHours.objects.create(
+                doctor=cls.doctor,
+                weekday=weekday,
+                starts_time=time(9, 0),
+                ends_time=time(17, 0),
+            )
+
+    def future_weekday_at(self, hour, days_ahead):
+        day = timezone.localdate() + timedelta(days=days_ahead)
+
+        while day.weekday() >= 5:
+            day += timedelta(days=1)
+
+        return timezone.make_aware(
+            datetime.combine(day, time(hour, 0)),
+            timezone.get_current_timezone(),
+        )
+
+    def create_appointment(self, hour, days_ahead):
+        return book_appointment(
+            doctor_id=self.doctor.id,
+            patient_id=self.patient.id,
+            starts_at=self.future_weekday_at(hour, days_ahead),
+        )
+
+    def make_request(self, patient_id):
+        factory = APIRequestFactory()
+        request = factory.get(
+            f"/api/patients/{patient_id}/appointments/"
+        )
+        return PatientAppointmentsView.as_view()(
+            request,
+            patient_id=patient_id,
+        )
+
+    def test_returns_upcoming_appointments_in_date_order(self):
+        later = self.create_appointment(hour=11, days_ahead=3)
+        earlier = self.create_appointment(hour=10, days_ahead=2)
+
+        response = self.make_request(self.patient.id)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [item["id"] for item in response.data],
+            [earlier.id, later.id],
+        )
+
+    def test_excludes_cancelled_appointments(self):
+        appointment = self.create_appointment(hour=10, days_ahead=2)
+        cancel_appointment(
+            appointment_id=appointment.id,
+            reason="Patient requested cancellation",
+        )
+
+        response = self.make_request(self.patient.id)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, [])
+
+    def test_unknown_patient_returns_404(self):
+        response = self.make_request(999999)
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+

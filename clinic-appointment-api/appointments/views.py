@@ -13,7 +13,7 @@ from .serializers import (AppointmentSerializer,
                           AppointmentCancelSerializer,
                           AppointmentRescheduleSerializer)
 from .models import (Appointment,
-                     Doctor,DoctorWorkingHours)
+                     Doctor,DoctorWorkingHours,Patient)
 
 from .services import (book_appointment,
                        cancel_appointment,
@@ -199,8 +199,33 @@ class AppointmentRescheduleView(APIView):
             status=status.HTTP_200_OK,
         )
 
+class PatientAppointmentsView(APIView):
+    def get(self,request,patient_id):
+        #Return 404 when the requested patient does not exist
 
+        if not Patient.objects.filter(pk=patient_id).exists():
+            raise NotFound(
+                {"detail":"Patient not found."}
+            )
+        #use the current time and return only future ,booked appointments.
 
-    
+        upcoming_appointments= Appointment.objects.filter(
+            patient_id=patient_id,
+            status=Appointment.Status.BOOKED,
+            starts_at__gt=timezone.now(),
+        ).select_related(
+            "doctor",
+            "patient",
+        ).order_by("starts_at")
+
+        serializer= AppointmentSerializer(
+            upcoming_appointments,
+            many=True,
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )
 
         
