@@ -8,7 +8,7 @@ from django.utils import timezone
 from rest_framework.test  import APIRequestFactory
 from  rest_framework import status
 
-from .views import AppointmentCancelView
+from .views import AppointmentCancelView,AppointmentRescheduleView
 from .models import (Doctor, DoctorWorkingHours, 
                      Patient, 
                      Appointment)
@@ -350,3 +350,84 @@ class AppointmentReschedulingTests(TestCase):
                     days_ahead=3,
                 ),
             )
+
+
+class AppointmentRescheduleAPITests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.doctor = Doctor.objects.create(
+            name="Dr. Amina Hassan",
+            speciality="General Practice",
+            is_active=True,
+        )
+        cls.patient = Patient.objects.create(
+            full_name="Mary Wanjiku",
+            email="mary.api@example.com",
+        )
+
+        for weekday in range(5):
+            DoctorWorkingHours.objects.create(
+                doctor=cls.doctor,
+                weekday=weekday,
+                starts_time=time(9, 0),
+                ends_time=time(17, 0),
+            )
+
+    def future_weekday_at(self, hour=10, days_ahead=2):
+        day = timezone.localdate() + timedelta(days=days_ahead)
+
+        while day.weekday() >= 5:
+            day += timedelta(days=1)
+
+        return timezone.make_aware(
+            datetime.combine(day, time(hour, 0)),
+            timezone.get_current_timezone(),
+        )
+
+    def create_appointment(self):
+        return book_appointment(
+            doctor_id=self.doctor.id,
+            patient_id=self.patient.id,
+            starts_at=self.future_weekday_at(),
+        )
+
+    def test_api_reschedule_returns_updated_appointment(self):
+        appointment = self.create_appointment()
+        new_start = self.future_weekday_at(hour=11, days_ahead=3)
+
+        factory = APIRequestFactory()
+        request = factory.patch(
+            f"/api/appointments/{appointment.id}/reschedule/",
+            {"new_starts_at": new_start.isoformat()},
+            format="json",
+        )
+
+        response = AppointmentRescheduleView.as_view()(
+            request,
+            appointment_id=appointment.id,
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["id"], appointment.id)
+        self.assertEqual(response.data["status"], Appointment.Status.BOOKED)
+        self.assertEqual(response.data["starts_at"], new_start.isoformat())
+
+    def test_api_rejects_missing_new_start_time(self):
+        appointment = self.create_appointment()
+        factory = APIRequestFactory()
+
+        request = factory.patch(
+            f"/api/appointments/{appointment.id}/reschedule/",
+            {},
+            format="json",
+        )
+
+        response = AppointmentRescheduleView.as_view()(
+            request,
+            appointment_id=appointment.id,
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )

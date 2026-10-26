@@ -10,7 +10,8 @@ from rest_framework.exceptions import NotFound
 
 from .serializers import (AppointmentSerializer,
                           AppointmentCreateSerializer,
-                          AppointmentCancelSerializer)
+                          AppointmentCancelSerializer,
+                          AppointmentRescheduleSerializer)
 from .models import (Appointment,
                      Doctor,DoctorWorkingHours)
 
@@ -167,7 +168,7 @@ class AppointmentCancelView(APIView):
 
 class AppointmentRescheduleView(APIView):
     def patch(self,request,appointment_id):
-        request_serializer=AppointmentRescheduleView(
+        request_serializer=AppointmentRescheduleSerializer(
             data=request.data
         )
         request_serializer.is_valid(raise_exception=True)
