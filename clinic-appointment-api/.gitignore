@@ -1,8 +1,17 @@
-.venv/
-__pycache__/
-*.py[cod]
-db.sqlite3
+# Environment variables and secrets
 .env
 .env.*
+
+# Allow a safe example configuration to be committed
 !.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Virtual environment
+.venv/
+venv/
+
+# Django collected static files
 staticfiles/
