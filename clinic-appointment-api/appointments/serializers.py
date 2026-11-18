@@ -57,5 +57,6 @@ class AppointmentCancelSerializer(serializers.Serializer):
 
 
 
+
 class AppointmentRescheduleSerializer(serializers.Serializer):
     new_starts_at= serializers.DateTimeField(required=True)

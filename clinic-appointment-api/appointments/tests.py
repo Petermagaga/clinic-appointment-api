@@ -535,6 +535,7 @@ class PatientAppointmentsAPITests(TestCase):
         self.assertEqual(response.data, [])
 
 
+
     def test_patient_with_no_upcoming_appointments_gets_empty_list(self):
         response = self.make_request(self.patient.id)
 
